@@ -30,4 +30,5 @@ node_addrs*
 infra/ansible/vault.yml
 .ansible
 infra/ansible/inventory/hosts.ini*
-infra/ansible/binaries/
+infra/ansible/binaries/# Large data files already on exported_data branch
+data/mainnet/gossip_archives/
