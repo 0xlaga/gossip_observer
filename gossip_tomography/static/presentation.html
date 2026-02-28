@@ -108,18 +108,37 @@
                 </aside>
             </section>
 
-            <!-- Slide 2: The Problem -->
+
             <section>
-                <h2>The Problem</h2>
-                <div class="visual-row">
-                    <div class="visual-item"><span class="bullet"></span> Async propagation</div>
-                    <div class="visual-item"><span class="bullet"></span> Arrival order = topology leak</div>
-                    <div class="visual-item"><span class="bullet"></span> Fast peers = relay heuristic signal</div>
-                    <div class="visual-item"><span class="bullet"></span> Co-location signal = shared /24</div>
-                    <div class="visual-item"><span class="bullet"></span> Feature bits = risk surface</div>
+                <h2>Dataset</h2>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="stat-val">416K</div>
+                        <div class="stat-label">Messages</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val">978</div>
+                        <div class="stat-label">Peers</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val">758</div>
+                        <div class="stat-label">With IP (clearnet)</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val">5,736</div>
+                        <div class="stat-label">Fingerprinted</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val">33</div>
+                        <div class="stat-label">Fast-Relay nodes</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-val">49</div>
+                        <div class="stat-label">Co-Location Signals (/24)</div>
+                    </div>
                 </div>
                 <aside class="notes">
-                    Lightning gossip propagates asynchronously. Who receives a message first reveals network topology. Peers that consistently arrive in the top 5% are a relay-timing heuristic signal, not direct surveillance proof. We treat shared /24 prefixes as co-location signals: useful infrastructure hints, but not proof of common operator control. And feature bits in node_announcement expose implementation fingerprint and risk surface.
+                    24-hour exported snapshot: 416K messages, 978 peers connected to the observer, 758 with clearnet IPs. 5,736 nodes fingerprinted from node_announcements. 33 fast-relay heuristics, 49 co-location signal groups (/24).
                 </aside>
             </section>
 
@@ -129,7 +148,7 @@
                     <div class="visual-item"><span class="bullet"></span> 24h exported data</div>
                     <div class="visual-item"><span class="bullet"></span> Wavefronts</div>
                     <div class="visual-item"><span class="bullet"></span> Fast-relay heuristics</div>
-                    <div class="visual-item"><span class="bullet"></span> Co-location signals (/24)</div>
+                    <div class="visual-item"><span class="bullet"></span> Co-location signals</div>
                     <div class="visual-item"><span class="bullet"></span> Feature fingerprint</div>
                 </div>
                 <aside class="notes">
@@ -167,35 +186,15 @@
             </section>
 
             <section>
-                <h2>Dataset</h2>
-                <div class="stat-grid">
-                    <div class="stat-box">
-                        <div class="stat-val">416K</div>
-                        <div class="stat-label">Messages</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-val">978</div>
-                        <div class="stat-label">Peers</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-val">758</div>
-                        <div class="stat-label">With IP (clearnet)</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-val">5,736</div>
-                        <div class="stat-label">Fingerprinted</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-val">33</div>
-                        <div class="stat-label">Fast-Relay Heuristics</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-val">49</div>
-                        <div class="stat-label">Co-Location Signals (/24)</div>
-                    </div>
+                <h2>Next Steps</h2>
+                <div class="visual-row">
+                    <div class="visual-item"><span class="bullet"></span> Real-time streaming</div>
+                    <div class="visual-item"><span class="bullet"></span> Multi-node observability</div>
+                    <div class="visual-item"><span class="bullet"></span> Multiple LN implementations</div>
+                    <div class="visual-item"><span class="bullet"></span> Greater heuristics</div>
                 </div>
                 <aside class="notes">
-                    24-hour exported snapshot: 416K messages, 978 peers connected to the observer, 758 with clearnet IPs. 5,736 nodes fingerprinted from node_announcements. 33 fast-relay heuristics, 49 co-location signal groups (/24).
+                    Roadmap: Live streaming instead of batch snapshots. Correlate multiple observer nodes for triangulation. Support LND, Core Lightning, Eclair alongside LDK. Expand detection and improve heuristics.
                 </aside>
             </section>
 
