@@ -90,8 +90,6 @@
         .reveal .visual-row { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin: 1.5rem 0; }
         .reveal .visual-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9em; }
         .reveal .bullet { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
-        .reveal .threat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.5rem; font-size: 0.8em; margin: 1rem 0; }
-        .reveal .threat-item { display: flex; align-items: center; gap: 0.4rem; }
     </style>
 </head>
 <body>
@@ -172,13 +170,13 @@
 
             <section>
                 <h2>Feature Risk Signal Report</h2>
-                <div class="threat-grid">
-                    <div class="threat-item"><span class="bullet"></span> Zero-Conf Theft</div>
-                    <div class="threat-item"><span class="bullet"></span> Anchor Exploit</div>
-                    <div class="threat-item"><span class="bullet"></span> No Backup</div>
-                    <div class="threat-item"><span class="bullet"></span> Gossip DoS</div>
-                    <div class="threat-item"><span class="bullet"></span> UTXO Exposed</div>
-                    <div class="threat-item"><span class="bullet"></span> Wumbo Target</div>
+                <div class="visual-row">
+                    <div class="visual-item"><span class="bullet"></span> Zero-Conf Theft</div>
+                    <div class="visual-item"><span class="bullet"></span> Anchor Exploit</div>
+                    <div class="visual-item"><span class="bullet"></span> No Backup</div>
+                    <div class="visual-item"><span class="bullet"></span> Gossip DoS</div>
+                    <div class="visual-item"><span class="bullet"></span> UTXO Exposed</div>
+                    <div class="visual-item"><span class="bullet"></span> Wumbo Target</div>
                 </div>
                 <aside class="notes">
                     From node_announcement feature bits: Zero-conf allows double-spend. Anchor channels vulnerable to replacement cycling. Missing data_loss_protect means revocation risk. Gossip queries enable bandwidth amplification. No scid_alias exposes unannounced channels. Wumbo = higher-value target.
