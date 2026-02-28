@@ -237,7 +237,7 @@ function renderSuspects() {
         const card = document.createElement("div");
         card.className = "suspect-card";
         card.dataset.pubkey = pk;
-        const pct = ((fr.top5_pct || 0) * 100).toFixed(0);
+        const pct = (fr.top5_pct || 0).toFixed(0);
         const isTor = fr.is_tor;
         card.innerHTML = `
             <div class="alias">${escHtml(fr.alias || pk.slice(0, 16) + "…")}</div>

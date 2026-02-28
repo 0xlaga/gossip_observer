@@ -27,4 +27,4 @@ def static_files(path):
 if __name__ == "__main__":
     print("\n  🔬 Gossip Tomography")
     print("  http://localhost:5001\n")
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=False)
