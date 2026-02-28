@@ -18,6 +18,8 @@ let messages = [];
 let communities = {};
 let leaks = {};
 let summary = {};
+let fingerprints = {};        // raw fingerprints.json
+let fpByPubkey = {};          // pubkey → { features_hex, feature_names, group_size }
 
 // ─── Selection state ────────────────────────────────────────────
 let highlightedPeers = new Set();   // pubkeys currently highlighted across all panels
@@ -69,15 +71,30 @@ window.addEventListener("load", async () => {
 // ═══════════════════════════════════════════════════════════════
 
 async function loadData() {
-    const [p, w, m, c, l, s] = await Promise.all([
+    const [p, w, m, c, l, s, fp] = await Promise.all([
         fetchJSON(`${DATA_BASE}/peers.json`),
         fetchJSON(`${DATA_BASE}/wavefronts.json`),
         fetchJSON(`${DATA_BASE}/messages.json`),
         fetchJSON(`${DATA_BASE}/communities.json`),
         fetchJSON(`${DATA_BASE}/leaks.json`),
         fetchJSON(`${DATA_BASE}/summary.json`),
+        fetchJSON(`${DATA_BASE}/fingerprints.json`),
     ]);
-    peers = p; wavefronts = w; communities = c; leaks = l; summary = s;
+    peers = p; wavefronts = w; communities = c; leaks = l; summary = s; fingerprints = fp;
+
+    // Build pubkey → fingerprint lookup
+    fpByPubkey = {};
+    if (fp.fingerprint_groups) {
+        for (const grp of fp.fingerprint_groups) {
+            for (const pk of (grp.sample_nodes || [])) {
+                fpByPubkey[pk] = {
+                    features_hex: grp.features_hex,
+                    feature_names: grp.feature_names || [],
+                    group_size: grp.node_count || 0,
+                };
+            }
+        }
+    }
 
     // Normalize messages dict → array, enrich from wavefronts
     if (!Array.isArray(m)) {
@@ -250,7 +267,7 @@ function renderSuspects() {
                 <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
                 <span class="bar-label">top-5: ${pct}%</span>
             </div>`;
-        card.addEventListener("click", () => highlightPeer(pk));
+        card.addEventListener("click", () => openNodeCard(pk));
         card.addEventListener("mouseenter", () => showPeerTooltip(pk, card));
         card.addEventListener("mouseleave", () => hideTooltip());
         container.appendChild(card);
@@ -288,11 +305,11 @@ function renderColocation() {
             if (e.target.classList.contains("chip")) return; // handled below
             highlightPeers(pubkeys);
         });
-        // Click individual chip → highlight single peer
+        // Click individual chip → open node card
         card.querySelectorAll(".chip").forEach(chip => {
             chip.addEventListener("click", (e) => {
                 e.stopPropagation();
-                highlightPeer(chip.dataset.pubkey);
+                openNodeCard(chip.dataset.pubkey);
             });
         });
         container.appendChild(card);
@@ -378,7 +395,7 @@ function renderAllMapMarkers() {
         marker.bindTooltip(
             `<b>${escHtml(peer.alias || "?")}</b><br>${peer.ip || "tor"}<br>${peer.city || ""}, ${peer.country || ""}`,
         );
-        marker.on("click", () => highlightPeer(pk));
+        marker.on("click", () => openNodeCard(pk));
         marker.addTo(leafletMap);
         mapMarkers[pk] = marker;
     }
@@ -659,11 +676,7 @@ function handleCanvasClick(e) {
     const rect = canvas.getBoundingClientRect();
     const pk = findClosestPeer(e.clientX - rect.left, e.clientY - rect.top);
     if (pk) {
-        if (highlightedPeers.has(pk) && highlightedPeers.size === 1) {
-            clearHighlight();
-        } else {
-            highlightPeer(pk);
-        }
+        openNodeCard(pk);
     } else {
         clearHighlight();
     }
@@ -695,6 +708,190 @@ function showPeerTooltip(pk, refEl) {
 function hideTooltip() {
     document.getElementById("tooltip").style.display = "none";
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  NODE INFO POPUP CARD
+// ═══════════════════════════════════════════════════════════════
+
+function openNodeCard(pubkey) {
+    const peer = peers[pubkey] || {};
+    const fp = fpByPubkey[pubkey];
+    const isSuspect = (leaks.first_responders || []).some(fr => (fr.pubkey || "") === pubkey);
+    const suspectData = (leaks.first_responders || []).find(fr => (fr.pubkey || "") === pubkey);
+    const state = peerStates[pubkey] || {};
+
+    // Find co-location groups this peer belongs to
+    const colocGroups = (leaks.colocation || []).filter(cl =>
+        (cl.peers || []).some(p => (typeof p === "string" ? p : p.pubkey) === pubkey)
+    );
+
+    const overlay = document.getElementById("node-card-overlay");
+    const card = document.getElementById("node-card");
+
+    // ── Build card HTML ──
+    let html = `
+    <div class="nc-header">
+        <div class="nc-alias">${escHtml(peer.alias || "Unknown Node")}</div>
+        <button class="nc-close" id="nc-close-btn">✕</button>
+    </div>
+    <div class="nc-pubkey">${pubkey}</div>
+
+    <div class="nc-section">
+        <div class="nc-section-title">Network Info</div>
+        <div class="nc-row">
+            <span class="nc-label">IP Address</span>
+            <span class="nc-val ${peer.is_tor ? '' : 'nc-good'}">${peer.ip || "🧅 Tor-only"}</span>
+        </div>
+        ${peer.city || peer.country ? `<div class="nc-row">
+            <span class="nc-label">Location</span>
+            <span class="nc-val">${[peer.city, peer.country].filter(Boolean).join(", ")}</span>
+        </div>` : ""}
+        ${peer.isp ? `<div class="nc-row">
+            <span class="nc-label">ISP</span>
+            <span class="nc-val">${escHtml(peer.isp)}</span>
+        </div>` : ""}
+        ${peer.as_info ? `<div class="nc-row">
+            <span class="nc-label">AS</span>
+            <span class="nc-val">${escHtml(peer.as_info)}</span>
+        </div>` : ""}
+        <div class="nc-row">
+            <span class="nc-label">Community</span>
+            <span class="nc-val">${escHtml(peer.community || "unknown")}</span>
+        </div>
+    </div>
+
+    <div class="nc-section">
+        <div class="nc-section-title">Gossip Propagation</div>
+        <div class="nc-row">
+            <span class="nc-label">Avg Arrival Percentile</span>
+            <span class="nc-val">${((peer.avg_arrival_pct || 0) * 100).toFixed(1)}%</span>
+        </div>
+        <div class="nc-row">
+            <span class="nc-label">Median Arrival Percentile</span>
+            <span class="nc-val">${((peer.median_arrival_pct || 0) * 100).toFixed(1)}%</span>
+        </div>
+        <div class="nc-row">
+            <span class="nc-label">Messages Seen</span>
+            <span class="nc-val">${(peer.messages_seen || 0).toLocaleString()}</span>
+        </div>
+        ${peer.top5_pct !== undefined ? `<div class="nc-row">
+            <span class="nc-label">Top-5% Arrivals</span>
+            <span class="nc-val">${((peer.top5_pct || 0) * 100).toFixed(1)}%</span>
+        </div>` : ""}
+        ${peer.first_pct !== undefined ? `<div class="nc-row">
+            <span class="nc-label">First Arrivals</span>
+            <span class="nc-val">${((peer.first_pct || 0) * 100).toFixed(1)}%</span>
+        </div>` : ""}
+        ${state.delay !== undefined && state.delay < Infinity ? `<div class="nc-row">
+            <span class="nc-label">Current Message Delay</span>
+            <span class="nc-val">+${state.delay.toFixed(0)} ms</span>
+        </div>` : ""}
+    </div>`;
+
+    // ── Surveillance section ──
+    if (isSuspect) {
+        html += `
+    <div class="nc-section">
+        <div class="nc-section-title" style="color:#e63946">⚠ Surveillance Suspect</div>
+        <div class="nc-row">
+            <span class="nc-label">Reason</span>
+            <span class="nc-val nc-warn">Abnormally fast relay — possible monitoring node</span>
+        </div>
+    </div>`;
+    }
+
+    // ── Co-location section ──
+    if (colocGroups.length > 0) {
+        html += `
+    <div class="nc-section">
+        <div class="nc-section-title" style="color:#e9c46a">📍 Co-Location Groups</div>`;
+        for (const cl of colocGroups) {
+            const others = (cl.peers || [])
+                .map(p => typeof p === "string" ? p : p.pubkey)
+                .filter(pk => pk !== pubkey);
+            const othersHtml = others.map(pk => {
+                const a = peers[pk]?.alias || pk.slice(0, 12) + "…";
+                return `<span class="nc-feat-tag" style="cursor:pointer;background:#e9c46a15;color:#e9c46a;border-color:#e9c46a30" data-card-peer="${pk}">${escHtml(a)}</span>`;
+            }).join("");
+            html += `
+        <div style="margin-bottom:6px">
+            <div style="font-size:10px;color:#e9c46a;font-weight:bold">${cl.prefix || "?"} <span style="color:#888;font-weight:normal">(${cl.count || others.length + 1} nodes)</span></div>
+            <div class="nc-features" style="margin-top:3px">${othersHtml}</div>
+        </div>`;
+        }
+        html += `</div>`;
+    }
+
+    // ── Fingerprint section ──
+    if (fp) {
+        const known = fp.feature_names.filter(n => !n.startsWith("unknown_bit_"));
+        const unknown = fp.feature_names.filter(n => n.startsWith("unknown_bit_"));
+        const totalNodes = fingerprints.total_nodes_parsed || 5736;
+        const groupPct = ((fp.group_size / totalNodes) * 100).toFixed(1);
+
+        html += `
+    <div class="nc-section">
+        <div class="nc-section-title" style="color:#a855f7">🔬 Implementation Fingerprint</div>
+        <div class="nc-row">
+            <span class="nc-label">Feature Count</span>
+            <span class="nc-val">${fp.feature_names.length} features</span>
+        </div>
+        <div class="nc-row">
+            <span class="nc-label">Fingerprint Group Size</span>
+            <span class="nc-val">${fp.group_size.toLocaleString()} nodes (${groupPct}%)</span>
+        </div>
+        <div class="nc-fingerprint-bar">
+            <div class="nc-fp-track"><div class="nc-fp-fill" style="width:${groupPct}%"></div></div>
+            <div class="nc-fp-label">${fp.group_size === 1 ? "Unique fingerprint — only node with this exact set" : fp.group_size <= 10 ? "Rare fingerprint" : fp.group_size <= 100 ? "Uncommon fingerprint" : fp.group_size <= 500 ? "Common fingerprint" : "Very common fingerprint (likely LND botnet)"}</div>
+        </div>
+        <div style="margin-top:8px">
+            <div style="font-size:9px;color:#666;margin-bottom:4px">Known Features (${known.length})</div>
+            <div class="nc-features">${known.map(f => `<span class="nc-feat-tag known">${f.replace(/_/g, " ")}</span>`).join("")}</div>
+        </div>
+        ${unknown.length > 0 ? `
+        <div style="margin-top:6px">
+            <div style="font-size:9px;color:#666;margin-bottom:4px">Unknown/Experimental Bits (${unknown.length})</div>
+            <div class="nc-features">${unknown.map(f => `<span class="nc-feat-tag unknown">${f}</span>`).join("")}</div>
+        </div>` : ""}
+    </div>`;
+    } else {
+        html += `
+    <div class="nc-section">
+        <div class="nc-section-title" style="color:#a855f7">🔬 Implementation Fingerprint</div>
+        <div style="font-size:10px;color:#555;font-style:italic">No node_announcement fingerprint data available for this peer</div>
+    </div>`;
+    }
+
+    card.innerHTML = html;
+    overlay.classList.add("open");
+
+    // Wire close button
+    document.getElementById("nc-close-btn").addEventListener("click", closeNodeCard);
+
+    // Click on co-located peer chip → open that peer's card
+    card.querySelectorAll("[data-card-peer]").forEach(el => {
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openNodeCard(el.dataset.cardPeer);
+        });
+    });
+
+    // Highlight this peer across all panels
+    highlightPeer(pubkey);
+}
+
+function closeNodeCard() {
+    document.getElementById("node-card-overlay").classList.remove("open");
+}
+
+// Close card on overlay background click or Escape
+document.addEventListener("click", (e) => {
+    const overlay = document.getElementById("node-card-overlay");
+    if (overlay && e.target === overlay) closeNodeCard();
+});
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeNodeCard();
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  UTILITIES

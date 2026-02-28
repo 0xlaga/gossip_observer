@@ -352,6 +352,136 @@
         .tooltip .t-score { color: #888; margin-top: 3px; }
         .tooltip .t-warn { color: #e63946; margin-top: 3px; }
 
+        /* ── Node Info Popup Card ── */
+        .node-card-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+        }
+        .node-card-overlay.open { display: flex; }
+        .node-card {
+            background: #101018;
+            border: 1px solid #ff6b3540;
+            border-radius: 8px;
+            width: 460px;
+            max-width: 92vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+            animation: cardIn 0.18s ease-out;
+        }
+        @keyframes cardIn {
+            from { transform: scale(0.92) translateY(10px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .nc-header {
+            padding: 14px 16px 10px;
+            border-bottom: 1px solid #1a1a2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .nc-header .nc-alias {
+            color: #ff6b35;
+            font-weight: bold;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        .nc-header .nc-close {
+            background: none;
+            border: 1px solid #333;
+            color: #888;
+            font-size: 14px;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-left: 10px;
+            font-family: inherit;
+        }
+        .nc-header .nc-close:hover { border-color: #ff6b35; color: #ff6b35; }
+        .nc-pubkey {
+            padding: 0 16px;
+            color: #555;
+            font-size: 9px;
+            word-break: break-all;
+            margin-top: 4px;
+            margin-bottom: 8px;
+        }
+        .nc-section {
+            padding: 8px 16px 10px;
+            border-top: 1px solid #1a1a2e;
+        }
+        .nc-section-title {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .nc-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            padding: 3px 0;
+        }
+        .nc-row .nc-label { color: #888; }
+        .nc-row .nc-val { color: #e0e0e0; font-weight: 600; text-align: right; max-width: 60%; word-break: break-all; }
+        .nc-row .nc-val.nc-warn { color: #e63946; }
+        .nc-row .nc-val.nc-good { color: #06d6a0; }
+
+        .nc-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin-top: 4px;
+        }
+        .nc-feat-tag {
+            font-size: 8px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            background: #1a1a2e;
+            color: #aaa;
+            border: 1px solid #2a2a3e;
+        }
+        .nc-feat-tag.known { background: #2a9d8f18; color: #2a9d8f; border-color: #2a9d8f40; }
+        .nc-feat-tag.unknown { background: #e9c46a12; color: #e9c46a; border-color: #e9c46a30; }
+
+        .nc-fingerprint-bar {
+            margin-top: 6px;
+        }
+        .nc-fp-track {
+            height: 6px;
+            background: #1a1a2e;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .nc-fp-fill {
+            height: 100%;
+            background: #a855f7;
+            border-radius: 3px;
+        }
+        .nc-fp-label {
+            font-size: 9px;
+            color: #a855f7;
+            margin-top: 2px;
+        }
+        .nc-fp-nodes-label {
+            font-size: 9px;
+            color: #666;
+            margin-top: 2px;
+        }
+
         /* ── Scrollbar ── */
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -441,6 +571,11 @@
             <div class="coloc-list" id="coloc-list"></div>
         </div>
     </div>
+</div>
+
+<!-- Node Info Popup Card -->
+<div class="node-card-overlay" id="node-card-overlay">
+    <div class="node-card" id="node-card"></div>
 </div>
 
 <div class="tooltip" id="tooltip"></div>
