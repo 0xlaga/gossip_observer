@@ -719,6 +719,7 @@ function drawFrame(elapsedMs) {
             }
         }
     }
+
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -837,9 +838,24 @@ function computeAndRenderThreats() {
     });
     bar.appendChild(slot1);
 
-    // ── Slots 2-7: Placeholders ──
+    // ── Slot 2: Peer Profiling (Infrastructure & AS Concentration) ──
+    const infraStats = computeInfraStats();
+    const slot2 = document.createElement("div");
+    slot2.className = "threat-slot";
+    slot2.innerHTML = `
+        <span class="ts-icon">🕵️</span>
+        <span class="ts-count" style="color:#e9c46a">${infraStats.sameOpNodes}</span>
+        <span class="ts-label">Peer Profiling</span>
+        <span class="ts-sev sev-medium">${infraStats.clusterCount}</span>
+    `;
+    slot2.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openPeerProfilingCard(infraStats);
+    });
+    bar.appendChild(slot2);
+
+    // ── Slots 3-7: Placeholders ──
     const placeholders = [
-        { icon: "🕵️", label: "Peer Profiling" },
         { icon: "🌐", label: "Topology Risks" },
         { icon: "📡", label: "Relay Patterns" },
         { icon: "🔐", label: "Privacy Leaks" },
@@ -856,6 +872,223 @@ function computeAndRenderThreats() {
             <span class="ts-sev" style="background:#1a1a2e;color:#333">soon</span>
         `;
         bar.appendChild(slot);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PEER PROFILING — Infrastructure & AS Concentration
+// ═══════════════════════════════════════════════════════════════
+
+function computeInfraStats() {
+    const totalPeers = Object.keys(peers).length;
+    const clearnet = {}, torPeers = {};
+    for (const [pk, v] of Object.entries(peers)) {
+        if (v.is_tor) torPeers[pk] = v; else clearnet[pk] = v;
+    }
+    const totalClearnet = Object.keys(clearnet).length;
+    const totalTor = Object.keys(torPeers).length;
+
+    // --- AS Concentration ---
+    const asCounter = {};
+    const ispCounter = {};
+    for (const v of Object.values(clearnet)) {
+        const ai = v.as_info || "";
+        const isp = v.isp || "";
+        if (ai) asCounter[ai] = (asCounter[ai] || 0) + 1;
+        if (isp) ispCounter[isp] = (ispCounter[isp] || 0) + 1;
+    }
+    const asSorted = Object.entries(asCounter).sort((a, b) => b[1] - a[1]);
+    const ispSorted = Object.entries(ispCounter).sort((a, b) => b[1] - a[1]);
+
+    // Top N
+    const top3AS = asSorted.slice(0, 3);
+    const top5AS = asSorted.slice(0, 5);
+    const top10AS = asSorted.slice(0, 10);
+    const top3Pct = totalClearnet ? top3AS.reduce((s, [, c]) => s + c, 0) / totalClearnet * 100 : 0;
+    const top5Pct = totalClearnet ? top5AS.reduce((s, [, c]) => s + c, 0) / totalClearnet * 100 : 0;
+    const top10Pct = totalClearnet ? top10AS.reduce((s, [, c]) => s + c, 0) / totalClearnet * 100 : 0;
+
+    // HHI
+    const shares = Object.values(asCounter).map(c => c / (totalClearnet || 1));
+    const hhi = shares.reduce((s, sh) => s + sh * sh, 0);
+
+    // Combined providers
+    const amazonTotal = Object.entries(asCounter).filter(([k]) => k.toLowerCase().includes("amazon")).reduce((s, [, c]) => s + c, 0);
+    const hetznerTotal = Object.entries(asCounter).filter(([k]) => k.toLowerCase().includes("hetzner")).reduce((s, [, c]) => s + c, 0);
+    const contaboTotal = Object.entries(asCounter).filter(([k]) => k.toLowerCase().includes("contabo")).reduce((s, [, c]) => s + c, 0);
+
+    // --- Country Concentration ---
+    const countryCounter = {};
+    for (const v of Object.values(clearnet)) {
+        const c = v.country || "";
+        if (c) countryCounter[c] = (countryCounter[c] || 0) + 1;
+    }
+    const countrySorted = Object.entries(countryCounter).sort((a, b) => b[1] - a[1]);
+
+    // --- Same-Operator Clusters (AS + fingerprint) ---
+    const clusters = {};
+    for (const pk of Object.keys(clearnet)) {
+        const asInfo = clearnet[pk].as_info || "";
+        const fpHex = fpByPubkey[pk]?.features_hex || "";
+        if (asInfo && fpHex) {
+            const key = asInfo + "|||" + fpHex;
+            if (!clusters[key]) clusters[key] = { as: asInfo, fp: fpHex, nodes: [] };
+            clusters[key].nodes.push(pk);
+        }
+    }
+    const bigClusters = Object.values(clusters).filter(c => c.nodes.length >= 3)
+        .sort((a, b) => b.nodes.length - a.nodes.length);
+
+    const sameOpNodes = bigClusters.reduce((s, c) => s + c.nodes.length, 0);
+
+    return {
+        totalPeers, totalClearnet, totalTor,
+        asSorted, ispSorted, top3AS, top5AS, top10AS,
+        top3Pct, top5Pct, top10Pct,
+        hhi, uniqueASes: asSorted.length,
+        amazonTotal, hetznerTotal, contaboTotal,
+        countrySorted,
+        bigClusters, sameOpNodes, clusterCount: bigClusters.length,
+    };
+}
+
+function openPeerProfilingCard(stats) {
+    const overlay = document.getElementById("threat-card-overlay");
+    const card = document.getElementById("threat-card");
+
+    // ── Section 1: AS Concentration ──
+    const asBarItems = stats.top10AS.map(([name, cnt], i) => {
+        const palette = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#a855f7", "#f97316", "#06b6d4", "#84cc16", "#f472b6", "#555"];
+        return { label: name.replace(/^AS\d+\s*/, "").slice(0, 20), value: cnt, color: palette[i % palette.length] };
+    });
+    const asViz = svgHBars(asBarItems, 200, 13);
+
+    const combinedViz = svgHBars([
+        { label: "Amazon (all ASes)", value: stats.amazonTotal, color: "#e63946" },
+        { label: "Hetzner (all ASes)", value: stats.hetznerTotal, color: "#e9c46a" },
+        { label: "Contabo (all ASes)", value: stats.contaboTotal, color: "#457b9d" },
+    ], 200, 13);
+
+    const asDonut = svgDonut([
+        { value: stats.top3AS.reduce((s, [, c]) => s + c, 0), color: "#e63946", label: "Top 3 ASes" },
+        { value: stats.top5AS.reduce((s, [, c]) => s + c, 0) - stats.top3AS.reduce((s, [, c]) => s + c, 0), color: "#e9c46a", label: "4th–5th" },
+        { value: stats.totalClearnet - stats.top5AS.reduce((s, [, c]) => s + c, 0), color: "#457b9d", label: "Other" },
+    ], 56);
+
+    // ── Section 2: Same-Operator Clusters ──
+    const clusterItems = stats.bigClusters.slice(0, 12).map((c, i) => {
+        const asShort = c.as.replace(/^AS\d+\s*/, "").slice(0, 16);
+        const aliases = c.nodes.slice(0, 2).map(pk => (peers[pk]?.alias || pk.slice(0, 8)).slice(0, 12));
+        const palette = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#a855f7", "#f97316", "#06b6d4", "#84cc16", "#f472b6", "#64748b", "#555", "#ec4899"];
+        return { label: `${asShort} (${aliases.join(", ")})`, value: c.nodes.length, color: palette[i % palette.length] };
+    });
+    const clusterViz = svgHBars(clusterItems, 200, 13);
+
+    // ── Section 3: Single Points of Failure ──
+    const spofItems = stats.top5AS.map(([name, cnt], i) => {
+        const palette = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#a855f7"];
+        return { label: name.replace(/^AS\d+\s*/, "").slice(0, 20), value: cnt, color: palette[i] };
+    });
+    const spofViz = svgHBars(spofItems, 200, 13);
+
+    const torDonut = svgDonut([
+        { value: stats.totalClearnet, color: "#e63946", label: "Clearnet" },
+        { value: stats.totalTor, color: "#2a9d8f", label: "Tor" },
+    ], 56);
+
+    // ── Section 4: Country Concentration ──
+    const countryItems = stats.countrySorted.slice(0, 8).map(([name, cnt], i) => {
+        const palette = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#a855f7", "#f97316", "#06b6d4", "#84cc16"];
+        return { label: name, value: cnt, color: palette[i % palette.length] };
+    });
+    const countryViz = svgHBars(countryItems, 200, 13);
+
+    // ── Sections definition ──
+    const sections = [
+        {
+            icon: "🏢", name: "AS Concentration", severity: "high",
+            stat: `Top 3 → ${stats.top3Pct.toFixed(1)}% · HHI ${stats.hhi.toFixed(3)}`,
+            attack: `${stats.uniqueASes} unique ASes host ${stats.totalClearnet} clearnet peers. The top 3 ASes alone control ${stats.top3Pct.toFixed(1)}% of observable nodes — Amazon (${stats.amazonTotal}), Cogent, Hetzner dominate. A single BGP hijack or legal subpoena to one AS could surveil or disrupt a significant fraction of the Lightning Network. HHI of ${stats.hhi.toFixed(3)} indicates moderate concentration.`,
+            source: "peers.json AS data via ip-api.com · gossip_observer",
+            viz: `<div style="font-size:9px;color:#666;margin-bottom:4px">Top 10 ASes by node count</div>${asViz}
+                  <div style="margin-top:8px;font-size:9px;color:#666;margin-bottom:4px">Combined provider footprint</div>${combinedViz}
+                  <div style="margin-top:8px;font-size:9px;color:#666;margin-bottom:4px">AS share distribution</div>${asDonut}`,
+        },
+        {
+            icon: "👥", name: "Same-Operator Clusters", severity: "medium",
+            stat: `${stats.clusterCount} clusters · ${stats.sameOpNodes} nodes`,
+            attack: `Nodes sharing the same AS <em>and</em> the same feature fingerprint likely belong to the same operator. ${stats.clusterCount} clusters of ≥3 nodes were detected, comprising ${stats.sameOpNodes} nodes. The largest cluster has ${stats.bigClusters[0]?.nodes.length || 0} nodes in a single AS with identical software. This creates correlated failure risk and reduces effective network decentralization.`,
+            source: "peers.json AS data + fingerprints.json · gossip_observer",
+            viz: `<div style="font-size:9px;color:#666;margin-bottom:4px">Largest same-operator clusters (AS + fingerprint, ≥3 nodes)</div>${clusterViz}`,
+        },
+        {
+            icon: "💥", name: "Single Points of Failure", severity: "high",
+            stat: `Top AS down → ${stats.top5AS[0]?.[1] || 0} lost (${((stats.top5AS[0]?.[1] || 0) / (stats.totalClearnet || 1) * 100).toFixed(1)}%)`,
+            attack: `If the top hosting provider (${stats.top5AS[0]?.[0]?.replace(/^AS\d+\s*/, "") || "?"}) suffers an outage, ${stats.top5AS[0]?.[1] || 0} clearnet peers (${((stats.top5AS[0]?.[1] || 0) / (stats.totalClearnet || 1) * 100).toFixed(1)}%) go offline simultaneously. Combined Amazon ASes host ${stats.amazonTotal} nodes (${(stats.amazonTotal / (stats.totalClearnet || 1) * 100).toFixed(1)}%). ${stats.totalTor} Tor peers (${(stats.totalTor / (stats.totalPeers || 1) * 100).toFixed(1)}% of network) have no geo/AS data — invisible to infrastructure analysis but also represent a hidden concentration risk if most route through the same exit nodes.`,
+            source: "peers.json AS/ISP data · gossip_observer",
+            viz: `<div style="font-size:9px;color:#666;margin-bottom:4px">Impact of top-5 AS outages on clearnet</div>${spofViz}
+                  <div style="margin-top:8px;font-size:9px;color:#666;margin-bottom:4px">Network transport split</div>${torDonut}`,
+        },
+        {
+            icon: "🌍", name: "Geographic Jurisdiction Risk", severity: "medium",
+            stat: `${stats.countrySorted[0]?.[0] || "?"}: ${((stats.countrySorted[0]?.[1] || 0) / (stats.totalClearnet || 1) * 100).toFixed(1)}%`,
+            attack: `${stats.countrySorted[0]?.[0] || "?"} hosts ${stats.countrySorted[0]?.[1] || 0} clearnet peers (${((stats.countrySorted[0]?.[1] || 0) / (stats.totalClearnet || 1) * 100).toFixed(1)}%). The top 3 countries cover ${((stats.countrySorted.slice(0, 3).reduce((s, [, c]) => s + c, 0)) / (stats.totalClearnet || 1) * 100).toFixed(1)}%. A coordinated regulatory action across just 2–3 jurisdictions could impact a majority of observable Lightning nodes. Geographic concentration also correlates with latency clustering, making timing attacks easier within the same jurisdiction.`,
+            source: "peers.json geo data via ip-api.com · gossip_observer",
+            viz: `<div style="font-size:9px;color:#666;margin-bottom:4px">Clearnet peers by country</div>${countryViz}`,
+        },
+    ];
+
+    // ── Render card ──
+    const sectionsHtml = sections.map((sec, idx) => {
+        const sevColor = sec.severity === "high" ? "#e63946" : sec.severity === "medium" ? "#e9c46a" : "#457b9d";
+        return `
+        <div class="tc-section${idx === 0 ? ' open' : ''}" data-tc-idx="${idx}">
+            <div class="tc-section-header">
+                <div class="tc-section-left">
+                    <span class="tc-section-icon">${sec.icon}</span>
+                    <span class="tc-section-name" style="color:${sevColor}">${sec.name}</span>
+                    <span class="ts-sev sev-${sec.severity}" style="font-size:8px;margin-left:4px">${sec.severity}</span>
+                </div>
+                <div class="tc-section-right">
+                    <span class="tc-section-count" style="color:${sevColor};font-size:9px">${sec.stat}</span>
+                    <span class="tc-section-chevron">▶</span>
+                </div>
+            </div>
+            <div class="tc-section-body">
+                <div class="tc-attack-desc">${sec.attack}</div>
+                <div class="tc-source">Source: ${sec.source}</div>
+                <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1a1a2e">
+                    ${sec.viz}
+                </div>
+            </div>
+        </div>`;
+    }).join("");
+
+    card.innerHTML = `
+        <div class="tc-header">
+            <div class="tc-title">🕵️ Peer Profiling — Infrastructure & AS Concentration</div>
+            <button class="tc-close" id="tc-close-btn">✕</button>
+        </div>
+        <div class="tc-summary">
+            ${stats.totalPeers} peers observed · ${stats.totalClearnet} clearnet · ${stats.totalTor} Tor · ${stats.uniqueASes} unique ASes · ${stats.clusterCount} same-operator clusters
+        </div>
+        ${sectionsHtml}
+    `;
+
+    overlay.classList.add("open");
+
+    document.getElementById("tc-close-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        overlay.classList.remove("open");
+    });
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.classList.remove("open");
+    });
+    card.querySelectorAll(".tc-section-header").forEach(header => {
+        header.addEventListener("click", (e) => {
+            e.stopPropagation();
+            header.closest(".tc-section").classList.toggle("open");
+        });
     });
 }
 
@@ -895,11 +1128,13 @@ function svgHBars(items, maxW = 220, barH = 14) {
     // items: [{label, value, color}] — sqrt scale for perceptible differences
     if (!items.length) return '<div style="font-size:9px;color:#555">No data</div>';
     const maxSqrt = Math.sqrt(Math.max(...items.map(it => it.value)) || 1);
+    // Compute label column width: measure longest label, clamp to [80, 150]
+    const labelW = Math.min(150, Math.max(80, Math.max(...items.map(it => it.label.length)) * 5.5));
     return items.map(it => {
         const w = it.value ? Math.max(8, (Math.sqrt(it.value) / maxSqrt) * maxW) : 0;
         const numOutside = w < 30;
         return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-            <span style="font-size:8px;color:#888;min-width:80px;text-align:right">${escHtml(it.label)}</span>
+            <span style="font-size:8px;color:#888;width:${labelW}px;flex-shrink:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(it.label)}">${escHtml(it.label)}</span>
             <div style="display:flex;align-items:center;gap:4px">
                 <div style="height:${barH}px;width:${w}px;background:${it.color};border-radius:2px;position:relative;flex-shrink:0">
                     ${!numOutside ? `<span style="position:absolute;right:4px;top:0;font-size:8px;color:#000;line-height:${barH}px;font-weight:bold">${it.value.toLocaleString()}</span>` : ""}
@@ -1150,11 +1385,11 @@ function openNodeCard(pubkey) {
         </div>
         ${peer.top5_pct !== undefined ? `<div class="nc-row">
             <span class="nc-label">Top-5% Arrivals</span>
-            <span class="nc-val">${((peer.top5_pct || 0) * 100).toFixed(1)}%</span>
+            <span class="nc-val">${(peer.top5_pct || 0).toFixed(1)}%</span>
         </div>` : ""}
         ${peer.first_pct !== undefined ? `<div class="nc-row">
             <span class="nc-label">First Arrivals</span>
-            <span class="nc-val">${((peer.first_pct || 0) * 100).toFixed(1)}%</span>
+            <span class="nc-val">${(peer.first_pct || 0).toFixed(1)}%</span>
         </div>` : ""}
         ${state.delay !== undefined && state.delay < Infinity ? `<div class="nc-row">
             <span class="nc-label">Current Message Delay</span>
