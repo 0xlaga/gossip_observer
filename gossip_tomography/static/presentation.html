@@ -114,12 +114,12 @@
                 <div class="visual-row">
                     <div class="visual-item"><span class="bullet"></span> Async propagation</div>
                     <div class="visual-item"><span class="bullet"></span> Arrival order = topology leak</div>
-                    <div class="visual-item"><span class="bullet"></span> Fast peers = surveillance?</div>
-                    <div class="visual-item"><span class="bullet"></span> Same subnet = co-location</div>
-                    <div class="visual-item"><span class="bullet"></span> Feature bits = exploit surface</div>
+                    <div class="visual-item"><span class="bullet"></span> Fast peers = relay heuristic signal</div>
+                    <div class="visual-item"><span class="bullet"></span> Co-location signal = shared /24</div>
+                    <div class="visual-item"><span class="bullet"></span> Feature bits = risk surface</div>
                 </div>
                 <aside class="notes">
-                    Lightning gossip propagates asynchronously. Who receives a message first reveals network topology. Peers that consistently arrive in the top 5% may be surveillance nodes. Nodes sharing the same IP subnet likely share an operator. And feature bits in node_announcement expose implementation fingerprint and attack surface.
+                    Lightning gossip propagates asynchronously. Who receives a message first reveals network topology. Peers that consistently arrive in the top 5% are a relay-timing heuristic signal, not direct surveillance proof. We treat shared /24 prefixes as co-location signals: useful infrastructure hints, but not proof of common operator control. And feature bits in node_announcement expose implementation fingerprint and risk surface.
                 </aside>
             </section>
 
@@ -128,12 +128,12 @@
                 <div class="visual-row">
                     <div class="visual-item"><span class="bullet"></span> 24h exported data</div>
                     <div class="visual-item"><span class="bullet"></span> Wavefronts</div>
-                    <div class="visual-item"><span class="bullet"></span> First responders</div>
-                    <div class="visual-item"><span class="bullet"></span> Co-location (/24)</div>
+                    <div class="visual-item"><span class="bullet"></span> Fast-relay heuristics</div>
+                    <div class="visual-item"><span class="bullet"></span> Co-location signals (/24)</div>
                     <div class="visual-item"><span class="bullet"></span> Feature fingerprint</div>
                 </div>
                 <aside class="notes">
-                    We use exported 24-hour data from the gossip observer project — we don't run a node. We build wavefronts: per-message arrival times. Identify first responders: peers in top 5%. Detect co-location from IPs in node_announcement. Parse feature bits for threat exposure.
+                    We use exported 24-hour data from the gossip observer project — we don't run a node. We build wavefronts: per-message arrival times. Identify fast-relay heuristics using top-5% timing thresholds. Build co-location signals from shared /24 prefixes in node_announcement clearnet addresses. Parse feature bits for protocol-level risk exposure.
                 </aside>
             </section>
 
@@ -142,17 +142,17 @@
                 <div class="quad-preview">
                     <div class="q1"><strong>Replay</strong><br>Radial viz · wavefront</div>
                     <div class="q2"><strong>Map</strong><br>Geo · highlight</div>
-                    <div class="q3"><strong>Suspects</strong><br>Fast relayers</div>
-                    <div class="q4"><strong>Co-loc</strong><br>Same /24</div>
+                    <div class="q3"><strong>Heuristics</strong><br>Fast relayers</div>
+                    <div class="q4"><strong>Co-location</strong><br>Signal groups (/24)</div>
                 </div>
                 <p style="margin-top:0.8rem;font-size:0.7em;color:#888">Click peer → highlights across all panels</p>
                 <aside class="notes">
-                    Four quadrants: top-left is propagation replay with radial viz and wavefront animation. Top-right is a world map with peer locations. Bottom-left lists surveillance suspects — first responders. Bottom-right shows co-located peers by subnet. Click any peer and it highlights across all panels.
+                    Four quadrants: top-left is propagation replay with radial viz and wavefront animation. Top-right is a world map with peer locations. Bottom-left lists fast-relay heuristics. Bottom-right shows co-location signal groups from /24 prefixes. Click any peer and it highlights across all panels.
                 </aside>
             </section>
 
             <section>
-                <h2>Feature Exploit Report</h2>
+                <h2>Feature Risk Signal Report</h2>
                 <div class="threat-grid">
                     <div class="threat-item"><span class="bullet"></span> Zero-Conf Theft</div>
                     <div class="threat-item"><span class="bullet"></span> Anchor Exploit</div>
@@ -186,16 +186,16 @@
                         <div class="stat-label">Fingerprinted</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-val">30</div>
-                        <div class="stat-label">Surveillance Suspects</div>
+                        <div class="stat-val">33</div>
+                        <div class="stat-label">Fast-Relay Heuristics</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-val">47</div>
-                        <div class="stat-label">Co-location Groups</div>
+                        <div class="stat-val">49</div>
+                        <div class="stat-label">Co-Location Signals (/24)</div>
                     </div>
                 </div>
                 <aside class="notes">
-                    24-hour exported snapshot: 416K messages, 978 peers connected to the observer, 758 with clearnet IPs. 5,736 nodes fingerprinted from node_announcements. 30 surveillance suspects, 47 co-location groups.
+                    24-hour exported snapshot: 416K messages, 978 peers connected to the observer, 758 with clearnet IPs. 5,736 nodes fingerprinted from node_announcements. 33 fast-relay heuristics, 49 co-location signal groups (/24).
                 </aside>
             </section>
 

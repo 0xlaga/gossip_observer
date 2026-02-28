@@ -5,8 +5,8 @@
 //  4-quadrant dashboard with cross-highlighting:
 //    Q1  Propagation Replay (radial canvas)
 //    Q2  World Map (Leaflet)
-//    Q3  Surveillance Suspects
-//    Q4  Co-located Peers
+//    Q3  Fast Relay Heuristics
+//    Q4  Co-Location Signals
 // ═══════════════════════════════════════════════════════════════
 
 const DATA_BASE = "data";
@@ -198,15 +198,16 @@ async function loadData() {
     }
 
     // Header stats
+    const mapLocatedCount = Object.values(peers).filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon)).length;
     document.getElementById("stat-peers").textContent = summary.total_peers || Object.keys(peers).length;
     document.getElementById("stat-msgs").textContent = summary.total_messages?.toLocaleString() || "—";
-    document.getElementById("stat-ips").textContent = summary.peers_with_ip || "—";
+    document.getElementById("stat-ips").textContent = mapLocatedCount.toLocaleString();
     document.getElementById("stat-suspects").textContent = (leaks.first_responders || []).length;
     document.getElementById("stat-coloc").textContent = (leaks.colocation || []).length;
 
     // Badges
-    document.getElementById("replay-badge").textContent = messages.length + " msgs";
-    document.getElementById("map-badge").textContent = (summary.peers_with_ip || 0) + " located";
+    document.getElementById("replay-badge").textContent = messages.length + " replay msgs";
+    document.getElementById("map-badge").textContent = mapLocatedCount + " mapped";
     document.getElementById("suspect-badge").textContent = (leaks.first_responders || []).length;
     document.getElementById("coloc-badge").textContent = (leaks.colocation || []).length + " groups";
 }
@@ -362,7 +363,7 @@ function renderSuspects() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  Q4 — CO-LOCATION
+//  Q4 — CO-LOCATION SIGNALS
 // ═══════════════════════════════════════════════════════════════
 
 function renderColocation() {
@@ -751,7 +752,7 @@ function handleCanvasHover(e) {
                 Avg arrival: ${((peer.avg_arrival_pct || 0) * 100).toFixed(1)}th pct<br>
                 ${state.delay < Infinity ? `This msg: +${state.delay.toFixed(0)}ms` : "Not in this message"}
             </div>
-            ${isSuspect ? '<div class="t-warn">⚠ Abnormally fast relay — possible monitoring node</div>' : ""}`;
+            ${isSuspect ? '<div class="t-warn">⚠ Heuristic signal: consistently fast relay (not attribution proof)</div>' : ""}`;
         tt.style.display = "block";
         tt.style.left = (e.clientX + 12) + "px";
         tt.style.top = (e.clientY - 10) + "px";
@@ -803,6 +804,8 @@ function hideTooltip() {
 
 function computeAndRenderThreats() {
     const totalFp = Object.keys(fpByPubkey).length;
+    const observedPeerCount = Object.keys(peers).length;
+    const observedPeerSet = new Set(Object.keys(peers));
     // For each threat, collect the set of affected pubkeys
     const threatData = THREAT_DEFS.map(def => {
         const affected = [];
@@ -812,7 +815,15 @@ function computeAndRenderThreats() {
                 affected.push(pk);
             }
         }
-        return { ...def, affected, count: affected.length, pct: totalFp ? ((affected.length / totalFp) * 100).toFixed(1) : "0" };
+        const observedCount = affected.filter(pk => observedPeerSet.has(pk)).length;
+        return {
+            ...def,
+            affected,
+            count: affected.length,
+            pct: totalFp ? ((affected.length / totalFp) * 100).toFixed(1) : "0",
+            observed_count: observedCount,
+            observed_pct: observedPeerCount ? ((observedCount / observedPeerCount) * 100).toFixed(1) : "0",
+        };
     });
 
     // Sort descending by count
@@ -822,14 +833,14 @@ function computeAndRenderThreats() {
     if (!bar) return;
     bar.innerHTML = "";
 
-    // ── Slot 1: Feature Exploits → opens the big card ──
+    // ── Slot 1: Feature risk signals → opens the big card ──
     const totalAffected = new Set(threatData.flatMap(td => td.affected)).size;
     const slot1 = document.createElement("div");
     slot1.className = "threat-slot";
     slot1.innerHTML = `
         <span class="ts-icon">🛡️</span>
         <span class="ts-count" style="color:#e63946">${totalAffected.toLocaleString()}</span>
-        <span class="ts-label">Feature Exploits</span>
+        <span class="ts-label">Feature Risk Signals</span>
         <span class="ts-sev sev-high">${threatData.length}</span>
     `;
     slot1.addEventListener("click", (e) => {
@@ -1250,6 +1261,10 @@ function openThreatCard(threatData, totalFp) {
     const card = document.getElementById("threat-card");
 
     const totalAffected = new Set(threatData.flatMap(td => td.affected)).size;
+    const observedPeerCount = Object.keys(peers).length;
+    const totalAffectedObserved = new Set(
+        threatData.flatMap(td => td.affected.filter(pk => peers[pk]))
+    ).size;
 
     let sectionsHtml = threatData.map((td, idx) => {
         const sevColor = td.severity === "high" ? "#e63946" : td.severity === "medium" ? "#e9c46a" : "#457b9d";
@@ -1277,6 +1292,10 @@ function openThreatCard(threatData, totalFp) {
                     <span class="tc-stat-label">Affected nodes</span>
                     <span class="tc-stat-val" style="color:${sevColor}">${td.count.toLocaleString()} / ${totalFp.toLocaleString()} (${td.pct}%)</span>
                 </div>
+                <div class="tc-stat-row">
+                    <span class="tc-stat-label">Affected in observed peers</span>
+                    <span class="tc-stat-val" style="color:${sevColor}">${td.observed_count.toLocaleString()} / ${observedPeerCount.toLocaleString()} (${td.observed_pct}%)</span>
+                </div>
                 <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1a1a2e">
                     ${vizHtml}
                 </div>
@@ -1286,11 +1305,11 @@ function openThreatCard(threatData, totalFp) {
 
     card.innerHTML = `
         <div class="tc-header">
-            <div class="tc-title">🛡️ Feature Exploit Report</div>
+            <div class="tc-title">🛡️ Feature Risk Signal Report</div>
             <button class="tc-close" id="tc-close-btn">✕</button>
         </div>
         <div class="tc-summary">
-            ${threatData.length} threat categories · ${totalAffected.toLocaleString()} unique nodes affected out of ${totalFp.toLocaleString()} fingerprinted
+            ${threatData.length} threat categories · ${totalAffected.toLocaleString()} unique affected in fingerprint corpus (${totalFp.toLocaleString()} nodes), ${totalAffectedObserved.toLocaleString()} in current observed set (${observedPeerCount.toLocaleString()} peers)
         </div>
         ${sectionsHtml}
     `;
@@ -1329,7 +1348,7 @@ function openNodeCard(pubkey) {
     const suspectData = (leaks.first_responders || []).find(fr => (fr.pubkey || "") === pubkey);
     const state = peerStates[pubkey] || {};
 
-    // Find co-location groups this peer belongs to
+    // Find co-location signal groups this peer belongs to (/24 heuristic)
     const colocGroups = (leaks.colocation || []).filter(cl =>
         (cl.peers || []).some(p => (typeof p === "string" ? p : p.pubkey) === pubkey)
     );
@@ -1401,19 +1420,19 @@ function openNodeCard(pubkey) {
     if (isSuspect) {
         html += `
     <div class="nc-section">
-        <div class="nc-section-title" style="color:#e63946">⚠ Surveillance Suspect</div>
+        <div class="nc-section-title" style="color:#e63946">⚠ Fast Relay Heuristic</div>
         <div class="nc-row">
             <span class="nc-label">Reason</span>
-            <span class="nc-val nc-warn">Abnormally fast relay — possible monitoring node</span>
+            <span class="nc-val nc-warn">Consistently early relay timing; potential privileged connectivity (not direct surveillance proof)</span>
         </div>
     </div>`;
     }
 
-    // ── Co-location section ──
+    // ── Co-location signal section (/24 heuristic) ──
     if (colocGroups.length > 0) {
         html += `
     <div class="nc-section">
-        <div class="nc-section-title" style="color:#e9c46a">📍 Co-Location Groups</div>`;
+        <div class="nc-section-title" style="color:#e9c46a">📍 Co-Location Signals (/24)</div>`;
         for (const cl of colocGroups) {
             const others = (cl.peers || [])
                 .map(p => typeof p === "string" ? p : p.pubkey)
@@ -1451,7 +1470,7 @@ function openNodeCard(pubkey) {
         </div>
         <div class="nc-fingerprint-bar">
             <div class="nc-fp-track"><div class="nc-fp-fill" style="width:${groupPct}%"></div></div>
-            <div class="nc-fp-label">${fp.group_size === 1 ? "Unique fingerprint — only node with this exact set" : fp.group_size <= 10 ? "Rare fingerprint" : fp.group_size <= 100 ? "Uncommon fingerprint" : fp.group_size <= 500 ? "Common fingerprint" : "Very common fingerprint (likely LND botnet)"}</div>
+            <div class="nc-fp-label">${fp.group_size === 1 ? "Unique fingerprint — only node with this exact set" : fp.group_size <= 10 ? "Rare fingerprint" : fp.group_size <= 100 ? "Uncommon fingerprint" : fp.group_size <= 500 ? "Common fingerprint" : "Very common fingerprint (likely shared implementation profile)"}</div>
         </div>
         <div style="margin-top:8px">
             <div style="font-size:9px;color:#666;margin-bottom:4px">Known Features (${known.length})</div>
@@ -1477,7 +1496,7 @@ function openNodeCard(pubkey) {
     // Wire close button
     document.getElementById("nc-close-btn").addEventListener("click", closeNodeCard);
 
-    // Click on co-located peer chip → open that peer's card
+    // Click on co-location signal peer chip → open that peer's card
     card.querySelectorAll("[data-card-peer]").forEach(el => {
         el.addEventListener("click", (e) => {
             e.stopPropagation();

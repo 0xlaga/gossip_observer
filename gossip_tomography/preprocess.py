@@ -337,10 +337,10 @@ def build_message_index(metadata: pl.DataFrame, message_hashes: list[int]) -> di
 
 def build_colocation_suspects(peers: dict) -> list:
     """
-    Find peers that are likely co-located based on:
-    - Same ASN / IP prefix
-    - Similar first-responder scores
-    - Consistently correlated arrival times
+    Build co-location signal groups using shared IPv4 /24 prefixes.
+
+    This is a coarse signal only: shared /24 can indicate common hosting or
+    operator infrastructure, but it is not proof of common control.
     """
     suspects = []
 
@@ -376,8 +376,10 @@ def build_colocation_suspects(peers: dict) -> list:
 
 def build_first_responder_leaks(peers: dict) -> list:
     """
-    Identify peers that are suspiciously fast — potential surveillance
-    or topologically privileged nodes.
+    Identify fast-relay heuristics using fixed thresholds.
+
+    Criteria: top5_pct > 30 and messages_seen > 10,000.
+    This flags consistently early relays but does not prove surveillance.
     """
     leaks = []
     for pubkey, info in peers.items():
@@ -447,8 +449,8 @@ def main():
     print("\n[6/7] Detecting privacy leaks...")
     colocation = build_colocation_suspects(peers)
     first_responders = build_first_responder_leaks(peers)
-    print(f"  Found {len(colocation)} co-location suspect groups")
-    print(f"  Found {len(first_responders)} suspicious first-responder peers")
+    print(f"  Found {len(colocation)} co-location signal groups (/24)")
+    print(f"  Found {len(first_responders)} fast-relay heuristic peers")
 
     # 7. Write output
     print("\n[7/7] Writing output files...")
@@ -474,7 +476,7 @@ def main():
             "colocation": colocation,
             "first_responders": first_responders,
         }, f)
-    print(f"  leaks.json ({len(colocation)} co-loc groups, {len(first_responders)} fast peers)")
+    print(f"  leaks.json ({len(colocation)} co-location signals (/24), {len(first_responders)} fast-relay heuristics)")
 
     # Summary stats for the frontend
     summary = {
