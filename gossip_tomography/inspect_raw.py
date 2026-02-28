@@ -309,6 +309,7 @@ def main():
                 "feature_names": sorted(set(decode_features(bytes.fromhex(fhex)).keys())) if fhex else [],
                 "node_count": len(nodes),
                 "sample_nodes": nodes[:5],
+                "all_nodes": nodes,
             }
             for fhex, nodes in sorted(fprint_groups.items(), key=lambda x: -len(x[1]))
         ],

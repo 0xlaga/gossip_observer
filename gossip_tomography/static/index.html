@@ -44,6 +44,212 @@
             background: #1a1a2e;
         }
 
+        /* ── Threat Bar (bottom 10vh) ── */
+        .threat-bar {
+            height: 10vh;
+            min-height: 56px;
+            flex-shrink: 0;
+            background: #08080d;
+            border-top: 1px solid #e6394640;
+            display: flex;
+            align-items: stretch;
+        }
+        .threat-slot {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            cursor: pointer;
+            border-right: 1px solid #1a1a2e;
+            transition: background 0.15s;
+            position: relative;
+            padding: 4px 2px;
+            min-width: 0;
+        }
+        .threat-slot:last-child { border-right: none; }
+        .threat-slot:hover { background: #12121e; }
+        .threat-slot .ts-icon { font-size: 18px; line-height: 1; }
+        .threat-slot .ts-count {
+            font-size: 16px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .threat-slot .ts-label {
+            font-size: 7px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #777;
+            text-align: center;
+            line-height: 1.15;
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            padding: 0 2px;
+        }
+        .threat-slot .ts-sev {
+            font-size: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 1px 4px;
+            border-radius: 2px;
+            line-height: 1;
+        }
+        .ts-sev.sev-high   { background: #e6394630; color: #e63946; }
+        .ts-sev.sev-medium { background: #e9c46a30; color: #e9c46a; }
+        .ts-sev.sev-low    { background: #457b9d30; color: #457b9d; }
+
+        /* Threat popup → now a full overlay card */
+        .threat-card-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+        }
+        .threat-card-overlay.open { display: flex; }
+        .threat-card {
+            background: #101018;
+            border: 1px solid #e6394650;
+            border-radius: 8px;
+            width: 560px;
+            max-width: 94vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+            animation: cardIn 0.18s ease-out;
+        }
+        .tc-header {
+            padding: 14px 16px 10px;
+            border-bottom: 1px solid #1a1a2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tc-header .tc-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #e63946;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tc-header .tc-close {
+            background: none;
+            border: 1px solid #333;
+            color: #888;
+            font-size: 14px;
+            cursor: pointer;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-family: inherit;
+        }
+        .tc-header .tc-close:hover { border-color: #e63946; color: #e63946; }
+        .tc-summary {
+            padding: 6px 16px 10px;
+            font-size: 10px;
+            color: #666;
+            border-bottom: 1px solid #1a1a2e;
+        }
+        .tc-section {
+            border-bottom: 1px solid #1a1a2e;
+        }
+        .tc-section:last-child { border-bottom: none; }
+        .tc-section-header {
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .tc-section-header:hover { background: #12121e; }
+        .tc-section-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tc-section-icon { font-size: 15px; }
+        .tc-section-name { font-size: 11px; font-weight: 600; }
+        .tc-section-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tc-section-count {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .tc-section-chevron {
+            font-size: 10px;
+            color: #555;
+            transition: transform 0.15s;
+        }
+        .tc-section.open .tc-section-chevron { transform: rotate(90deg); }
+        .tc-section-body {
+            display: none;
+            padding: 0 16px 10px;
+        }
+        .tc-section.open .tc-section-body { display: block; }
+        .tc-attack-desc {
+            font-size: 9px;
+            color: #999;
+            line-height: 1.5;
+            margin-bottom: 6px;
+        }
+        .tc-attack-desc .tc-attack-label {
+            color: #e63946;
+            font-weight: 600;
+        }
+        .tc-source {
+            font-size: 8px;
+            color: #444;
+            margin-bottom: 6px;
+        }
+        .tc-stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            margin-bottom: 6px;
+        }
+        .tc-stat-row .tc-stat-label { color: #888; }
+        .tc-stat-row .tc-stat-val { font-weight: bold; }
+        .tc-node-list {
+            max-height: 18vh;
+            overflow-y: auto;
+        }
+        .tc-node-chip {
+            display: inline-block;
+            font-size: 8px;
+            padding: 2px 5px;
+            margin: 1px;
+            background: #1a1a2e;
+            border-radius: 2px;
+            color: #aaa;
+            cursor: pointer;
+            transition: background 0.12s, color 0.12s;
+        }
+        .tc-node-chip:hover { background: #e6394630; color: #e63946; }
+
+        /* Placeholder slots */
+        .threat-slot.placeholder {
+            cursor: default;
+            opacity: 0.35;
+        }
+        .threat-slot.placeholder:hover { background: transparent; }
+        .threat-slot.placeholder .ts-icon { filter: grayscale(1); }
+        .threat-slot.placeholder .ts-label { color: #444; }
+
         /* ── Quadrant base ── */
         .quad {
             background: #0a0a0f;
@@ -571,6 +777,14 @@
             <div class="coloc-list" id="coloc-list"></div>
         </div>
     </div>
+</div>
+
+<!-- Threat Indicator Bar -->
+<div class="threat-bar" id="threat-bar"></div>
+
+<!-- Threat Report Card Overlay -->
+<div class="threat-card-overlay" id="threat-card-overlay">
+    <div class="threat-card" id="threat-card"></div>
 </div>
 
 <!-- Node Info Popup Card -->

@@ -21,6 +21,89 @@ let summary = {};
 let fingerprints = {};        // raw fingerprints.json
 let fpByPubkey = {};          // pubkey → { features_hex, feature_names, group_size }
 
+// ─── Threat indicator definitions ───────────────────────────────
+// Each entry: feature to check, whether presence or absence is the threat,
+// severity, icon, short label, attack description, source references.
+const THREAT_DEFS = [
+    {
+        id: "zero_conf",
+        feature: "zero_conf",
+        mode: "present",       // threat when the feature IS advertised
+        severity: "high",
+        icon: "⏱️",
+        label: "Zero-Conf Theft",
+        shortLabel: "Zero-Conf",
+        attack: "Accepts unconfirmed channels — funder can double-spend the funding tx, stealing all routed funds before confirmation.",
+        source: "BOLTs #910"
+    },
+    {
+        id: "anchors_exploit",
+        feature: "anchors_zero_fee_htlc_tx",
+        mode: "present",
+        severity: "high",
+        icon: "⚓",
+        label: "Anchor Replacement Cycling",
+        shortLabel: "Anchor Exploit",
+        attack: "Anchor-format channels are vulnerable to replacement cycling attacks — counterparty can repeatedly evict HTLC claims from the mempool to steal funds before timelocks expire.",
+        source: "Riard 2023, Optech #272"
+    },
+    {
+        id: "no_data_loss",
+        feature: "data_loss_protect",
+        mode: "absent",        // threat when feature is MISSING
+        severity: "high",
+        icon: "💾",
+        label: "No Backup Protection",
+        shortLabel: "No Backup",
+        attack: "Node lacks data_loss_protect — if it loses its channel database, it cannot safely recover. Peer could broadcast revoked state and steal all channel funds.",
+        source: "BOLT 9 bit 0/1"
+    },
+    {
+        id: "gossip_dos",
+        feature: "gossip_queries",
+        mode: "present",
+        severity: "medium",
+        icon: "📡",
+        label: "Gossip Bandwidth DoS",
+        shortLabel: "Gossip DoS",
+        attack: "Supports gossip_queries — can be abused for bandwidth amplification: small request triggers full graph dump. Repeated queries can overwhelm CPU and bandwidth.",
+        source: "BOLT 7"
+    },
+    {
+        id: "large_target",
+        feature: "large_channels",
+        mode: "present",
+        severity: "medium",
+        icon: "🐋",
+        label: "High-Value Target",
+        shortLabel: "Wumbo Target",
+        attack: "Advertises wumbo/large channels (>0.168 BTC). More capital at risk in hot wallets — higher-value target for force-close griefing and replacement cycling.",
+        source: "BOLT 11"
+    },
+    {
+        id: "no_scid_alias",
+        feature: "scid_alias",
+        mode: "absent",
+        severity: "medium",
+        icon: "🔗",
+        label: "No UTXO Hiding",
+        shortLabel: "UTXO Exposed",
+        attack: "Lacks scid_alias — unannounced channels expose their on-chain UTXO to any routing peer. Enables channel probing and on-chain surveillance linkage.",
+        source: "BOLTs #910"
+    },
+    {
+        id: "no_chan_type",
+        feature: "channel_type",
+        mode: "absent",
+        severity: "low",
+        icon: "🔄",
+        label: "Channel Downgrade Risk",
+        shortLabel: "Downgrade",
+        attack: "Missing explicit channel_type negotiation — peer could trick this node into opening a legacy (non-anchor) channel with weaker security properties.",
+        source: "BOLTs #880"
+    },
+];
+
 // ─── Selection state ────────────────────────────────────────────
 let highlightedPeers = new Set();   // pubkeys currently highlighted across all panels
 let currentMsg = null;
@@ -86,7 +169,8 @@ async function loadData() {
     fpByPubkey = {};
     if (fp.fingerprint_groups) {
         for (const grp of fp.fingerprint_groups) {
-            for (const pk of (grp.sample_nodes || [])) {
+            const nodeList = grp.all_nodes || grp.sample_nodes || [];
+            for (const pk of nodeList) {
                 fpByPubkey[pk] = {
                     features_hex: grp.features_hex,
                     feature_names: grp.feature_names || [],
@@ -95,6 +179,9 @@ async function loadData() {
             }
         }
     }
+
+    // ── Compute threat indicators from fingerprints ──
+    computeAndRenderThreats();
 
     // Normalize messages dict → array, enrich from wavefronts
     if (!Array.isArray(m)) {
@@ -707,6 +794,160 @@ function showPeerTooltip(pk, refEl) {
 
 function hideTooltip() {
     document.getElementById("tooltip").style.display = "none";
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  THREAT INDICATOR BAR
+// ═══════════════════════════════════════════════════════════════
+
+function computeAndRenderThreats() {
+    const totalFp = Object.keys(fpByPubkey).length;
+    // For each threat, collect the set of affected pubkeys
+    const threatData = THREAT_DEFS.map(def => {
+        const affected = [];
+        for (const [pk, fpInfo] of Object.entries(fpByPubkey)) {
+            const has = fpInfo.feature_names.includes(def.feature);
+            if ((def.mode === "present" && has) || (def.mode === "absent" && !has)) {
+                affected.push(pk);
+            }
+        }
+        return { ...def, affected, count: affected.length, pct: totalFp ? ((affected.length / totalFp) * 100).toFixed(1) : "0" };
+    });
+
+    // Sort descending by count
+    threatData.sort((a, b) => b.count - a.count);
+
+    const bar = document.getElementById("threat-bar");
+    if (!bar) return;
+    bar.innerHTML = "";
+
+    // ── Slot 1: Feature Exploits → opens the big card ──
+    const totalAffected = new Set(threatData.flatMap(td => td.affected)).size;
+    const slot1 = document.createElement("div");
+    slot1.className = "threat-slot";
+    slot1.innerHTML = `
+        <span class="ts-icon">🛡️</span>
+        <span class="ts-count" style="color:#e63946">${totalAffected.toLocaleString()}</span>
+        <span class="ts-label">Feature Exploits</span>
+        <span class="ts-sev sev-high">${threatData.length}</span>
+    `;
+    slot1.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openThreatCard(threatData, totalFp);
+    });
+    bar.appendChild(slot1);
+
+    // ── Slots 2-7: Placeholders ──
+    const placeholders = [
+        { icon: "🕵️", label: "Peer Profiling" },
+        { icon: "🌐", label: "Topology Risks" },
+        { icon: "📡", label: "Relay Patterns" },
+        { icon: "🔐", label: "Privacy Leaks" },
+        { icon: "⏱️", label: "Timing Attacks" },
+        { icon: "🗺️", label: "Geo Clustering" },
+    ];
+    placeholders.forEach(ph => {
+        const slot = document.createElement("div");
+        slot.className = "threat-slot placeholder";
+        slot.innerHTML = `
+            <span class="ts-icon">${ph.icon}</span>
+            <span class="ts-count" style="color:#333">—</span>
+            <span class="ts-label">${ph.label}</span>
+            <span class="ts-sev" style="background:#1a1a2e;color:#333">soon</span>
+        `;
+        bar.appendChild(slot);
+    });
+}
+
+// ── Threat Report Card (full overlay) ──
+
+function openThreatCard(threatData, totalFp) {
+    const overlay = document.getElementById("threat-card-overlay");
+    const card = document.getElementById("threat-card");
+
+    const totalAffected = new Set(threatData.flatMap(td => td.affected)).size;
+
+    let sectionsHtml = threatData.map((td, idx) => {
+        const sevColor = td.severity === "high" ? "#e63946" : td.severity === "medium" ? "#e9c46a" : "#457b9d";
+        return `
+        <div class="tc-section${idx === 0 ? ' open' : ''}" data-tc-idx="${idx}">
+            <div class="tc-section-header">
+                <div class="tc-section-left">
+                    <span class="tc-section-icon">${td.icon}</span>
+                    <span class="tc-section-name" style="color:${sevColor}">${td.label}</span>
+                    <span class="ts-sev sev-${td.severity}" style="font-size:8px;margin-left:4px">${td.severity}</span>
+                </div>
+                <div class="tc-section-right">
+                    <span class="tc-section-count" style="color:${sevColor}">${td.count.toLocaleString()}</span>
+                    <span class="tc-section-chevron">▶</span>
+                </div>
+            </div>
+            <div class="tc-section-body">
+                <div class="tc-attack-desc">
+                    <span class="tc-attack-label">${td.mode === "present" ? "Feature present" : "Feature MISSING"}: ${td.feature}</span><br>
+                    ${td.attack}
+                </div>
+                <div class="tc-source">Source: ${td.source}</div>
+                <div class="tc-stat-row">
+                    <span class="tc-stat-label">Affected nodes</span>
+                    <span class="tc-stat-val" style="color:${sevColor}">${td.count.toLocaleString()} / ${totalFp.toLocaleString()} (${td.pct}%)</span>
+                </div>
+                ${td.count > 0 ? `<div style="font-size:8px;color:#555;margin-bottom:4px">Click a node to inspect ↓</div>` : ""}
+                <div class="tc-node-list">
+                    ${td.affected.slice(0, 200).map(pk => {
+                        const al = peers[pk]?.alias || pk.slice(0, 12) + "…";
+                        return `<span class="tc-node-chip" data-tc-peer="${pk}">${escHtml(al)}</span>`;
+                    }).join("")}
+                    ${td.affected.length > 200 ? `<span style="font-size:8px;color:#555;display:block;margin-top:4px">+${td.affected.length - 200} more…</span>` : ""}
+                </div>
+            </div>
+        </div>`;
+    }).join("");
+
+    card.innerHTML = `
+        <div class="tc-header">
+            <div class="tc-title">🛡️ Feature Exploit Report</div>
+            <button class="tc-close" id="tc-close-btn">✕</button>
+        </div>
+        <div class="tc-summary">
+            ${threatData.length} threat categories · ${totalAffected.toLocaleString()} unique nodes affected out of ${totalFp.toLocaleString()} fingerprinted
+        </div>
+        ${sectionsHtml}
+    `;
+
+    overlay.classList.add("open");
+
+    // Close button
+    document.getElementById("tc-close-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        overlay.classList.remove("open");
+    });
+
+    // Close on backdrop click
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.classList.remove("open");
+    });
+
+    // Accordion toggles
+    card.querySelectorAll(".tc-section-header").forEach(header => {
+        header.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const section = header.closest(".tc-section");
+            section.classList.toggle("open");
+        });
+    });
+
+    // Node chips → open node card
+    card.querySelectorAll(".tc-node-chip").forEach(chip => {
+        chip.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const pk = chip.dataset.tcPeer;
+            if (pk) {
+                overlay.classList.remove("open");
+                openNodeCard(pk);
+            }
+        });
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
