@@ -5,7 +5,7 @@
 //  4-quadrant dashboard with cross-highlighting:
 //    Q1  Propagation Replay (radial canvas)
 //    Q2  World Map (Leaflet)
-//    Q3  Surveillance Suspects
+//    Q3  Fast Relay Heuristics
 //    Q4  Co-located Peers
 // ═══════════════════════════════════════════════════════════════
 
@@ -205,7 +205,7 @@ async function loadData() {
     document.getElementById("stat-coloc").textContent = (leaks.colocation || []).length;
 
     // Badges
-    document.getElementById("replay-badge").textContent = messages.length + " msgs";
+    document.getElementById("replay-badge").textContent = messages.length + " replay msgs";
     document.getElementById("map-badge").textContent = (summary.peers_with_ip || 0) + " located";
     document.getElementById("suspect-badge").textContent = (leaks.first_responders || []).length;
     document.getElementById("coloc-badge").textContent = (leaks.colocation || []).length + " groups";
@@ -750,7 +750,7 @@ function handleCanvasHover(e) {
                 Avg arrival: ${((peer.avg_arrival_pct || 0) * 100).toFixed(1)}th pct<br>
                 ${state.delay < Infinity ? `This msg: +${state.delay.toFixed(0)}ms` : "Not in this message"}
             </div>
-            ${isSuspect ? '<div class="t-warn">⚠ Abnormally fast relay — possible monitoring node</div>' : ""}`;
+            ${isSuspect ? '<div class="t-warn">⚠ Heuristic signal: consistently fast relay (not attribution proof)</div>' : ""}`;
         tt.style.display = "block";
         tt.style.left = (e.clientX + 12) + "px";
         tt.style.top = (e.clientY - 10) + "px";
@@ -821,14 +821,14 @@ function computeAndRenderThreats() {
     if (!bar) return;
     bar.innerHTML = "";
 
-    // ── Slot 1: Feature Exploits → opens the big card ──
+    // ── Slot 1: Feature risk signals → opens the big card ──
     const totalAffected = new Set(threatData.flatMap(td => td.affected)).size;
     const slot1 = document.createElement("div");
     slot1.className = "threat-slot";
     slot1.innerHTML = `
         <span class="ts-icon">🛡️</span>
         <span class="ts-count" style="color:#e63946">${totalAffected.toLocaleString()}</span>
-        <span class="ts-label">Feature Exploits</span>
+        <span class="ts-label">Feature Risk Signals</span>
         <span class="ts-sev sev-high">${threatData.length}</span>
     `;
     slot1.addEventListener("click", (e) => {
@@ -1051,7 +1051,7 @@ function openThreatCard(threatData, totalFp) {
 
     card.innerHTML = `
         <div class="tc-header">
-            <div class="tc-title">🛡️ Feature Exploit Report</div>
+            <div class="tc-title">🛡️ Feature Risk Signal Report</div>
             <button class="tc-close" id="tc-close-btn">✕</button>
         </div>
         <div class="tc-summary">
@@ -1150,11 +1150,11 @@ function openNodeCard(pubkey) {
         </div>
         ${peer.top5_pct !== undefined ? `<div class="nc-row">
             <span class="nc-label">Top-5% Arrivals</span>
-            <span class="nc-val">${((peer.top5_pct || 0) * 100).toFixed(1)}%</span>
+            <span class="nc-val">${(peer.top5_pct || 0).toFixed(1)}%</span>
         </div>` : ""}
         ${peer.first_pct !== undefined ? `<div class="nc-row">
             <span class="nc-label">First Arrivals</span>
-            <span class="nc-val">${((peer.first_pct || 0) * 100).toFixed(1)}%</span>
+            <span class="nc-val">${(peer.first_pct || 0).toFixed(1)}%</span>
         </div>` : ""}
         ${state.delay !== undefined && state.delay < Infinity ? `<div class="nc-row">
             <span class="nc-label">Current Message Delay</span>
@@ -1166,10 +1166,10 @@ function openNodeCard(pubkey) {
     if (isSuspect) {
         html += `
     <div class="nc-section">
-        <div class="nc-section-title" style="color:#e63946">⚠ Surveillance Suspect</div>
+        <div class="nc-section-title" style="color:#e63946">⚠ Fast Relay Heuristic</div>
         <div class="nc-row">
             <span class="nc-label">Reason</span>
-            <span class="nc-val nc-warn">Abnormally fast relay — possible monitoring node</span>
+            <span class="nc-val nc-warn">Consistently early relay timing; potential privileged connectivity (not direct surveillance proof)</span>
         </div>
     </div>`;
     }
@@ -1178,7 +1178,7 @@ function openNodeCard(pubkey) {
     if (colocGroups.length > 0) {
         html += `
     <div class="nc-section">
-        <div class="nc-section-title" style="color:#e9c46a">📍 Co-Location Groups</div>`;
+        <div class="nc-section-title" style="color:#e9c46a">📍 Same-/24 Groups</div>`;
         for (const cl of colocGroups) {
             const others = (cl.peers || [])
                 .map(p => typeof p === "string" ? p : p.pubkey)
@@ -1216,7 +1216,7 @@ function openNodeCard(pubkey) {
         </div>
         <div class="nc-fingerprint-bar">
             <div class="nc-fp-track"><div class="nc-fp-fill" style="width:${groupPct}%"></div></div>
-            <div class="nc-fp-label">${fp.group_size === 1 ? "Unique fingerprint — only node with this exact set" : fp.group_size <= 10 ? "Rare fingerprint" : fp.group_size <= 100 ? "Uncommon fingerprint" : fp.group_size <= 500 ? "Common fingerprint" : "Very common fingerprint (likely LND botnet)"}</div>
+            <div class="nc-fp-label">${fp.group_size === 1 ? "Unique fingerprint — only node with this exact set" : fp.group_size <= 10 ? "Rare fingerprint" : fp.group_size <= 100 ? "Uncommon fingerprint" : fp.group_size <= 500 ? "Common fingerprint" : "Very common fingerprint (likely shared implementation profile)"}</div>
         </div>
         <div style="margin-top:8px">
             <div style="font-size:9px;color:#666;margin-bottom:4px">Known Features (${known.length})</div>
