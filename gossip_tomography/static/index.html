@@ -487,7 +487,7 @@
         .tag-tor { background: #a855f720; color: #a855f7; }
         .tag-clearnet { background: #06d6a020; color: #06d6a0; }
 
-        /* ── Q4: Co-located Peers (bottom-right) ── */
+        /* ── Q4: Co-location signals (bottom-right) ── */
         .q-coloc .quad-header h2 { color: #e9c46a; }
         .q-coloc .badge { background: #e9c46a20; color: #e9c46a; }
         .coloc-list {
@@ -704,9 +704,9 @@
     <div class="stats">
         <span><span class="val" id="stat-peers">—</span> peers</span>
         <span><span class="val" id="stat-msgs">—</span> msgs in archive</span>
-        <span><span class="val" id="stat-ips">—</span> geolocated</span>
+        <span><span class="val" id="stat-ips">—</span> map-located</span>
         <span><span class="val" id="stat-suspects">—</span> fast relayers</span>
-        <span><span class="val" id="stat-coloc">—</span> /24 groups</span>
+        <span><span class="val" id="stat-coloc">—</span> co-location signals</span>
     </div>
 </div>
 
@@ -749,7 +749,7 @@
     <div class="quad q-map">
         <div class="quad-header">
             <h2>🌍 Geolocation Map</h2>
-            <span class="badge" id="map-badge">0 located</span>
+            <span class="badge" id="map-badge">0 mapped</span>
         </div>
         <div class="quad-body">
             <div id="map-container"></div>
@@ -767,10 +767,10 @@
         </div>
     </div>
 
-    <!-- Q4: Same-/24 peer groups (bottom-right) -->
+    <!-- Q4: Co-location signals (bottom-right) -->
     <div class="quad q-coloc">
         <div class="quad-header">
-            <h2>📍 Same-/24 Peer Groups</h2>
+            <h2>📍 Co-Location Signals (/24)</h2>
             <span class="badge" id="coloc-badge">0 groups</span>
         </div>
         <div class="quad-body">
