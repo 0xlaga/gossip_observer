@@ -861,6 +861,155 @@ function computeAndRenderThreats() {
 
 // ── Threat Report Card (full overlay) ──
 
+// ── SVG chart helpers ──
+
+function svgDonut(slices, size = 64) {
+    // slices: [{value, color, label}]
+    const total = slices.reduce((s, d) => s + d.value, 0);
+    if (!total) return '<div style="font-size:9px;color:#555">No data</div>';
+    const cx = size / 2, cy = size / 2, r = size * 0.36, r2 = size * 0.22;
+    let cumAngle = -Math.PI / 2;
+    let paths = "";
+    slices.forEach(sl => {
+        if (!sl.value) return;
+        const frac = sl.value / total;
+        const angle = frac * 2 * Math.PI;
+        const large = angle > Math.PI ? 1 : 0;
+        const x1 = cx + r * Math.cos(cumAngle), y1 = cy + r * Math.sin(cumAngle);
+        const x2 = cx + r * Math.cos(cumAngle + angle), y2 = cy + r * Math.sin(cumAngle + angle);
+        const x3 = cx + r2 * Math.cos(cumAngle + angle), y3 = cy + r2 * Math.sin(cumAngle + angle);
+        const x4 = cx + r2 * Math.cos(cumAngle), y4 = cy + r2 * Math.sin(cumAngle);
+        paths += `<path d="M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${r2},${r2} 0 ${large} 0 ${x4},${y4}Z" fill="${sl.color}"><title>${sl.label}: ${sl.value} (${(frac*100).toFixed(0)}%)</title></path>`;
+        cumAngle += angle;
+    });
+    const legend = slices.filter(s => s.value).map(s =>
+        `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px"><span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block"></span>${s.label} ${s.value}</span>`
+    ).join("");
+    return `<div style="display:flex;align-items:center;gap:10px">
+        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths}</svg>
+        <div style="font-size:8px;color:#aaa;line-height:1.6">${legend}</div>
+    </div>`;
+}
+
+function svgHBars(items, maxW = 220, barH = 14) {
+    // items: [{label, value, color}] — sqrt scale for perceptible differences
+    if (!items.length) return '<div style="font-size:9px;color:#555">No data</div>';
+    const maxSqrt = Math.sqrt(Math.max(...items.map(it => it.value)) || 1);
+    return items.map(it => {
+        const w = it.value ? Math.max(8, (Math.sqrt(it.value) / maxSqrt) * maxW) : 0;
+        const numOutside = w < 30;
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+            <span style="font-size:8px;color:#888;min-width:80px;text-align:right">${escHtml(it.label)}</span>
+            <div style="display:flex;align-items:center;gap:4px">
+                <div style="height:${barH}px;width:${w}px;background:${it.color};border-radius:2px;position:relative;flex-shrink:0">
+                    ${!numOutside ? `<span style="position:absolute;right:4px;top:0;font-size:8px;color:#000;line-height:${barH}px;font-weight:bold">${it.value.toLocaleString()}</span>` : ""}
+                </div>
+                ${numOutside && it.value ? `<span style="font-size:8px;color:${it.color};font-weight:bold">${it.value.toLocaleString()}</span>` : ""}
+            </div>
+        </div>`;
+    }).join("");
+}
+
+function buildThreatViz(td) {
+    // Classify affected nodes along a dimension relevant to each threat type
+    const affected = td.affected;
+    if (!affected.length) return '<div style="font-size:9px;color:#555">No affected nodes</div>';
+
+    switch (td.id) {
+        case "zero_conf": {
+            // Fingerprint group size → impl clustering
+            const groups = {};
+            affected.forEach(pk => {
+                const fp = fpByPubkey[pk];
+                const gs = fp ? fp.group_size : 0;
+                const bucket = gs >= 1000 ? "1000+" : gs >= 100 ? "100–999" : gs >= 10 ? "10–99" : gs >= 2 ? "2–9" : "unique";
+                groups[bucket] = (groups[bucket] || 0) + 1;
+            });
+            const order = ["1000+", "100–999", "10–99", "2–9", "unique"];
+            const colors = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#555"];
+            const items = order.map((b, i) => ({ label: b + " nodes", value: groups[b] || 0, color: colors[i] })).filter(x => x.value);
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">By fingerprint group size (impl clustering)</div>` + svgHBars(items);
+        }
+        case "anchors_exploit": {
+            // Tor vs clearnet
+            let tor = 0, clear = 0;
+            affected.forEach(pk => { (peers[pk]?.is_tor) ? tor++ : clear++; });
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Network exposure</div>` +
+                svgDonut([
+                    { value: clear, color: "#e63946", label: "Clearnet" },
+                    { value: tor, color: "#457b9d", label: "Tor" },
+                ]);
+        }
+        case "no_data_loss": {
+            // Top countries
+            const countries = {};
+            affected.forEach(pk => {
+                const c = peers[pk]?.country || "Unknown";
+                countries[c] = (countries[c] || 0) + 1;
+            });
+            const sorted = Object.entries(countries).sort((a, b) => b[1] - a[1]).slice(0, 6);
+            const palette = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#a855f7", "#555"];
+            const items = sorted.map(([c, v], i) => ({ label: c, value: v, color: palette[i % palette.length] }));
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Geographic concentration</div>` + svgHBars(items);
+        }
+        case "gossip_dos": {
+            // Relay speed tiers
+            const tiers = { "Fast (<20%)": 0, "Medium (20–50%)": 0, "Slow (50–80%)": 0, "Very slow (>80%)": 0 };
+            affected.forEach(pk => {
+                const p = peers[pk]?.avg_arrival_pct || 0.5;
+                if (p < 0.2) tiers["Fast (<20%)"]++;
+                else if (p < 0.5) tiers["Medium (20–50%)"]++;
+                else if (p < 0.8) tiers["Slow (50–80%)"]++;
+                else tiers["Very slow (>80%)"]++;
+            });
+            const colors = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f"];
+            const items = Object.entries(tiers).map(([k, v], i) => ({ label: k, value: v, color: colors[i] }));
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Targetable nodes by relay centrality (faster = more central, higher impact)</div>` + svgHBars(items);
+        }
+        case "large_target": {
+            // Activity tiers as proxy for capital exposure (more msgs seen = more connections = more BTC at risk)
+            const tiers = { "> 100k msgs": 0, "10k – 100k": 0, "1k – 10k": 0, "100 – 1k": 0, "< 100 msgs": 0 };
+            affected.forEach(pk => {
+                const m = peers[pk]?.messages_seen || 0;
+                if (m >= 100000) tiers["> 100k msgs"]++;
+                else if (m >= 10000) tiers["10k – 100k"]++;
+                else if (m >= 1000) tiers["1k – 10k"]++;
+                else if (m >= 100) tiers["100 – 1k"]++;
+                else tiers["< 100 msgs"]++;
+            });
+            const colors = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f", "#555"];
+            const items = Object.entries(tiers).map(([k, v], i) => ({ label: k, value: v, color: colors[i] }));
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Gossip activity (proxy for connectivity & capital exposure)</div>` + svgHBars(items);
+        }
+        case "no_scid_alias": {
+            // Tor vs clearnet — clearnet = fully deanonymized UTXOs
+            let tor = 0, clear = 0;
+            affected.forEach(pk => { (peers[pk]?.is_tor) ? tor++ : clear++; });
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Privacy exposure (clearnet = UTXO fully linkable)</div>` +
+                svgDonut([
+                    { value: clear, color: "#e63946", label: "Clearnet exposed" },
+                    { value: tor, color: "#2a9d8f", label: "Tor (partial cover)" },
+                ]);
+        }
+        case "no_chan_type": {
+            // Feature count ranges → impl maturity
+            const ranges = { "1–5 features": 0, "6–10 features": 0, "11–15 features": 0, "16+ features": 0 };
+            affected.forEach(pk => {
+                const n = fpByPubkey[pk]?.feature_names?.length || 0;
+                if (n <= 5) ranges["1–5 features"]++;
+                else if (n <= 10) ranges["6–10 features"]++;
+                else if (n <= 15) ranges["11–15 features"]++;
+                else ranges["16+ features"]++;
+            });
+            const colors = ["#e63946", "#e9c46a", "#457b9d", "#2a9d8f"];
+            const items = Object.entries(ranges).map(([k, v], i) => ({ label: k, value: v, color: colors[i] }));
+            return `<div style="font-size:9px;color:#666;margin-bottom:4px">Implementation maturity (feature count)</div>` + svgHBars(items);
+        }
+        default:
+            return '<div style="font-size:9px;color:#555">No visualization available</div>';
+    }
+}
+
 function openThreatCard(threatData, totalFp) {
     const overlay = document.getElementById("threat-card-overlay");
     const card = document.getElementById("threat-card");
@@ -869,6 +1018,7 @@ function openThreatCard(threatData, totalFp) {
 
     let sectionsHtml = threatData.map((td, idx) => {
         const sevColor = td.severity === "high" ? "#e63946" : td.severity === "medium" ? "#e9c46a" : "#457b9d";
+        const vizHtml = buildThreatViz(td);
         return `
         <div class="tc-section${idx === 0 ? ' open' : ''}" data-tc-idx="${idx}">
             <div class="tc-section-header">
@@ -892,13 +1042,8 @@ function openThreatCard(threatData, totalFp) {
                     <span class="tc-stat-label">Affected nodes</span>
                     <span class="tc-stat-val" style="color:${sevColor}">${td.count.toLocaleString()} / ${totalFp.toLocaleString()} (${td.pct}%)</span>
                 </div>
-                ${td.count > 0 ? `<div style="font-size:8px;color:#555;margin-bottom:4px">Click a node to inspect ↓</div>` : ""}
-                <div class="tc-node-list">
-                    ${td.affected.slice(0, 200).map(pk => {
-                        const al = peers[pk]?.alias || pk.slice(0, 12) + "…";
-                        return `<span class="tc-node-chip" data-tc-peer="${pk}">${escHtml(al)}</span>`;
-                    }).join("")}
-                    ${td.affected.length > 200 ? `<span style="font-size:8px;color:#555;display:block;margin-top:4px">+${td.affected.length - 200} more…</span>` : ""}
+                <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1a1a2e">
+                    ${vizHtml}
                 </div>
             </div>
         </div>`;
@@ -934,18 +1079,6 @@ function openThreatCard(threatData, totalFp) {
             e.stopPropagation();
             const section = header.closest(".tc-section");
             section.classList.toggle("open");
-        });
-    });
-
-    // Node chips → open node card
-    card.querySelectorAll(".tc-node-chip").forEach(chip => {
-        chip.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const pk = chip.dataset.tcPeer;
-            if (pk) {
-                overlay.classList.remove("open");
-                openNodeCard(pk);
-            }
         });
     });
 }
